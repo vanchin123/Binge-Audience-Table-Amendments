@@ -1,0 +1,1422 @@
+
+/* Favourite Distributor */
+
+INSERT INTO  prst.prst_video_event
+            (
+                        martian_id,
+                        brand,
+                        event_tstp,
+                        account_name,
+                        profile_id,
+                        event_group,
+                        event_type,
+                        event_parameter,
+                        event_parameter_value,
+                        event_sequence
+            )
+SELECT x.martian_id AS martian_id,
+       brand,
+       Convert_timezone( 'Australia/Sydney', Getdate() ) AS event_tstp,
+       x.account_name                                    AS account_name,
+       x.initial_profile_id                              AS profile_id,
+       'consumption'                                     AS event_group,
+       'activity_by_play_count'                          AS event_type,
+       'favourite_distributor'                           AS event_parameter,
+       Trim( x.event_measure :: varchar(500) )           AS event_parameter_value,
+       NULL                                              AS event_sequence
+FROM   (
+                SELECT   y.*,
+                         row_number() OVER ( partition BY y.martian_id, brand ORDER BY y.event_parameter_value DESC nulls last, event_measure ) AS rn
+                FROM     (
+                                  SELECT   account_name,
+                                           brand,
+                                           martian_id,
+                                           initial_profile_id,
+                                           event_measure,
+                                           count(event_parameter_value) AS event_parameter_value
+                                  FROM     (
+                                                  SELECT account_name,
+                                                         brand,
+                                                         martian_id,
+                                                         initial_profile_id,
+                                                         distributor AS event_measure,
+                                                         CASE WHEN effective_play_duration > 0 THEN 1 END AS event_parameter_value
+                                                  FROM   #stream_event_working src
+                                                  WHERE  1 = 1
+                                                  AND    distributor IS NOT NULL ) z
+                                  GROUP BY account_name,
+                                           brand,
+                                           martian_id,
+                                           initial_profile_id,
+                                           event_measure ) y ) x
+WHERE  x.rn = 1;
+
+/* Most Watched Series/Movie */
+INSERT INTO  prst.prst_video_event
+            (
+                        martian_id,
+                        brand,
+                        event_tstp,
+                        account_name,
+                        profile_id,
+                        event_group,
+                        event_type,
+                        event_parameter,
+                        event_parameter_value,
+                        event_sequence
+            )
+SELECT x.martian_id AS martian_id,
+       brand,
+       Convert_timezone( 'Australia/Sydney', Getdate() )             AS event_tstp,
+       x.account_name                                                AS account_name,
+       x.initial_profile_id                                          AS profile_id,
+       'consumption'                                                 AS event_group,
+       'activity_by_play_duration'                                   AS event_type,
+       'most_viewed_series_movie'                                    AS event_parameter,
+       Trim( Replace(x.event_measure, '"', '\\"') :: varchar(1000) ) AS event_parameter_value,
+       NULL                                                          AS event_sequence
+FROM   (
+                SELECT   y.*,
+                         dense_rank() OVER ( partition BY y.martian_id, brand ORDER BY y.event_parameter_value DESC nulls last ) AS rn
+                FROM     (
+                                  SELECT   src.account_name,
+                                           src.brand,
+                                           src.martian_id,
+                                           src.initial_profile_id,
+                                           CASE WHEN src.stream_asset_type IN ( 'series','tv-episode','miniseries' ) THEN src.series_name ELSE src.stream_title END AS event_measure,
+                                           sum(src.effective_play_duration) AS event_parameter_value
+                                  FROM     #stream_event_working src
+                                  WHERE    1 = 1
+                                  GROUP BY src.account_name,
+                                           src.brand,
+                                           src.martian_id,
+                                           src.initial_profile_id,
+                                           event_measure ) y ) x
+WHERE  x.rn = 1;
+
+/* Most Watched Series/Movie in last 7D */
+
+INSERT INTO  prst.prst_video_event
+            (
+                        martian_id,
+                        brand,
+                        event_tstp,
+                        account_name,
+                        profile_id,
+                        event_group,
+                        event_type,
+                        event_parameter,
+                        event_parameter_value,
+                        event_sequence
+            )
+SELECT x.martian_id AS martian_id,
+       brand,
+       Convert_timezone( 'Australia/Sydney', Getdate() )             AS event_tstp,
+       x.account_name                                                AS account_name,
+       x.initial_profile_id                                          AS profile_id,
+       'consumption'                                                 AS event_group,
+       'activity_by_play_duration'                                   AS event_type,
+       'most_viewed_series_last_7d'                                  AS event_parameter,
+       Trim( Replace(x.event_measure, '"', '\\"') :: varchar(1000) ) AS event_parameter_value,
+       NULL                                                          AS event_sequence
+FROM   (
+                SELECT   y.*,
+                         dense_rank() OVER ( partition BY y.martian_id, brand ORDER BY y.event_parameter_value DESC nulls last ) AS rn
+                FROM     (
+                                  SELECT   src.account_name,
+                                           src.brand,
+                                           src.martian_id,
+                                           src.initial_profile_id,
+                                           CASE WHEN src.stream_asset_type IN ( 'series', 'tv-episode', 'miniseries' ) THEN src.series_name ELSE src.stream_title END AS event_measure,
+                                           sum(CASE WHEN stream_start_date BETWEEN dateadd( 'day', -8, getdate() ) AND getdate() THEN src.effective_play_duration END) AS event_parameter_value
+                                  FROM     #stream_event_working src
+                                  WHERE    1 = 1
+                                  GROUP BY src.account_name,
+                                           src.brand,
+                                           src.martian_id,
+                                           src.initial_profile_id,
+                                           event_measure ) y ) x
+WHERE  x.rn = 1;
+
+/* Most Watched Series/Movie in last 30D */
+
+INSERT INTO  prst.prst_video_event
+            (
+                        martian_id,
+                        brand,
+                        event_tstp,
+                        account_name,
+                        profile_id,
+                        event_group,
+                        event_type,
+                        event_parameter,
+                        event_parameter_value,
+                        event_sequence
+            )
+SELECT x.martian_id AS martian_id,
+       brand,
+       Convert_timezone( 'Australia/Sydney', Getdate() )             AS event_tstp,
+       x.account_name                                                AS account_name,
+       x.initial_profile_id                                          AS profile_id,
+       'consumption'                                                 AS event_group,
+       'activity_by_play_duration'                                   AS event_type,
+       'most_viewed_series_last 30d'                                 AS event_parameter,
+       Trim( Replace(x.event_measure, '"', '\\"') :: varchar(1000) ) AS event_parameter_value,
+       NULL                                                          AS event_sequence
+FROM   (
+                SELECT   y.*,
+                         dense_rank() OVER ( partition BY y.martian_id, brand ORDER BY y.event_parameter_value DESC nulls last ) AS rn
+                FROM     (
+                                  SELECT   src.account_name,
+                                           src.brand,
+                                           src.martian_id,
+                                           src.initial_profile_id,
+                                           CASE WHEN src.stream_asset_type = 'series' THEN src.series_name ELSE src.stream_title END AS event_measure,
+                                           sum(CASE WHEN stream_start_date BETWEEN dateadd( 'day', -30, getdate() ) AND getdate() THEN src.effective_play_duration END)  AS event_parameter_value
+                                  FROM     #stream_event_working src
+                                  WHERE    1 = 1
+                                  GROUP BY src.account_name,
+                                           src.brand,
+                                           src.martian_id,
+                                           src.initial_profile_id,
+                                           event_measure
+                                            ) y ) x
+WHERE  x.rn = 1;
+
+/* Number of Series/Movie in last 30D */
+
+INSERT INTO  prst.prst_video_event
+            (
+                        martian_id,
+                        brand,
+                        event_tstp,
+                        account_name,
+                        profile_id,
+                        event_group,
+                        event_type,
+                        event_parameter,
+                        event_parameter_value,
+                        event_sequence
+            )
+SELECT   x.martian_id AS martian_id,
+         brand,
+         Convert_timezone( 'Australia/Sydney', Getdate() ) AS event_tstp,
+         x.account_name                                    AS account_name,
+         x.initial_profile_id                              AS profile_id,
+         'consumption'                                     AS event_group,
+         'summary'                                         AS event_type,
+         'total_no_of_series_and_movies_last_30d'          AS event_parameter,
+         Count(DISTINCT event_measure):: varchar(1000)     AS event_parameter_value,
+         NULL                                              AS event_sequence
+FROM     (
+                  SELECT   account_name,
+                           brand,
+                           martian_id,
+                           initial_profile_id,
+                           CASE WHEN stream_start_date BETWEEN dateadd( 'day', -31, getdate() ) AND getdate() THEN 
+                                      (CASE WHEN src.stream_asset_type IN ( 'series','tv-episode','miniseries' ) THEN src.series_name ELSE src.stream_title END)
+                                END AS event_measure
+                  FROM     #stream_event_working src
+                  WHERE    1 = 1
+                  GROUP BY account_name,
+                           brand,
+                           martian_id,
+                           initial_profile_id,
+                           event_measure ) x
+GROUP BY 1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8;
+
+/* No. Series/Movie in last 7D */
+
+INSERT INTO  prst.prst_video_event
+            (
+                        martian_id,
+                        brand,
+                        event_tstp,
+                        account_name,
+                        profile_id,
+                        event_group,
+                        event_type,
+                        event_parameter,
+                        event_parameter_value,
+                        event_sequence
+            )
+SELECT   x.martian_id AS martian_id,
+         brand,
+         Convert_timezone( 'Australia/Sydney', Getdate() ) AS event_tstp,
+         x.account_name                                    AS account_name,
+         x.initial_profile_id                              AS profile_id,
+         'consumption'                                     AS event_group,
+         'summary'                                         AS event_type,
+         'total_no_of_series_and_movies_last_7d'           AS event_parameter,
+         Count(DISTINCT event_measure):: varchar(1000)     AS event_parameter_value,
+         NULL                                              AS event_sequence
+FROM     (
+                  SELECT   account_name,
+                           brand,
+                           martian_id,
+                           initial_profile_id,
+                           stream_start_date,
+                            CASE WHEN stream_start_date BETWEEN dateadd( 'day', -8, getdate() ) AND getdate() THEN (
+                                           CASE WHEN src.stream_asset_type IN ( 'series', 'tv-episode', 'miniseries' ) THEN src.series_name ELSE src.stream_title END )
+                            END 
+                           AS event_measure
+                  FROM     #stream_event_working src
+                  ) x
+GROUP BY 1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8;
+
+/* Latest Movie/Series Watched */
+
+INSERT INTO  prst.prst_video_event
+            (
+                        martian_id,
+                        brand,
+                        event_tstp,
+                        account_name,
+                        profile_id,
+                        event_group,
+                        event_type,
+                        event_parameter,
+                        event_parameter_value,
+                        event_sequence
+            )
+SELECT x.martian_id AS martian_id,
+       brand,
+       Convert_timezone( 'Australia/Sydney', Getdate() )             AS event_tstp,
+       x.account_name                                                AS account_name,
+       x.initial_profile_id                                          AS profile_id,
+       'consumption'                                                 AS event_group,
+       'summary'                                                     AS event_type,
+       'last_watched_movie_or_series'                                AS event_parameter,
+       Trim( Replace(x.event_measure, '"', '\\"') :: varchar(1000) ) AS event_parameter_value,
+       NULL                                                          AS event_sequence
+FROM   (
+                SELECT   account_name,
+                         brand,
+                         martian_id,
+                         initial_profile_id,
+                         CASE WHEN src.stream_asset_type IN ( 'series','tv-episode','miniseries' ) THEN src.series_name ELSE src.stream_title END AS event_measure,
+                         dense_rank() OVER ( partition BY src.martian_id, initial_profile_id, brand ORDER BY stream_start_tstp DESC nulls last ) AS rn
+                FROM     #stream_event_working src) x
+WHERE  x.rn = 1;
+
+/* Number of Days Watched in last 30D */
+
+INSERT INTO  prst.prst_video_event
+            (
+                        martian_id,
+                        brand,
+                        event_tstp,
+                        account_name,
+                        profile_id,
+                        event_group,
+                        event_type,
+                        event_parameter,
+                        event_parameter_value,
+                        event_sequence
+            )
+SELECT   x.martian_id AS martian_id,
+         brand,
+         Convert_timezone( 'Australia/Sydney', Getdate() ) AS event_tstp,
+         x.account_name                                    AS account_name,
+         x.initial_profile_id                              AS profile_id,
+         'consumption'                                     AS event_group,
+         'summary'                                         AS event_type,
+         'total_days_since_last_watched_in_30d'            AS event_parameter,
+         Count(DISTINCT event_measure):: varchar(1000)     AS event_parameter_value,
+         NULL                                              AS event_sequence
+FROM     (
+                SELECT account_name,
+                       brand,
+                       martian_id,
+                       initial_profile_id,
+                       CASE WHEN effective_play_duration > 60000 and stream_start_date BETWEEN dateadd( 'day', -31, getdate() ) AND  getdate()THEN stream_start_date END AS event_measure
+                FROM   #stream_event_working src
+                WHERE  1 = 1 ) x
+GROUP BY 1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8;
+
+/* Number of Hours Watched in last 30D */
+
+INSERT INTO  prst.prst_video_event
+            (
+                        martian_id,
+                        brand,
+                        event_tstp,
+                        account_name,
+                        profile_id,
+                        event_group,
+                        event_type,
+                        event_parameter,
+                        event_parameter_value,
+                        event_sequence
+            )
+SELECT x.martian_id AS martian_id,
+       brand,
+       Convert_timezone( 'Australia/Sydney', Getdate() ) AS event_tstp,
+       x.account_name                                    AS account_name,
+       x.initial_profile_id                              AS profile_id,
+       'consumption'                                     AS event_group,
+       'activity_by_play_duration'                       AS event_type,
+       'total_play_duration_last_30d'                    AS event_parameter,
+       Trim( x.event_parameter_value :: varchar(1000) )  AS event_parameter_value,
+       NULL                                              AS event_sequence
+FROM   (
+                SELECT   account_name,
+                         brand,
+                         martian_id,
+                         initial_profile_id,
+                         sum( case when stream_start_date BETWEEN dateadd( 'day', -31, getdate() ) AND getdate() THEN effective_play_duration END) AS event_parameter_value
+                FROM     #stream_event_working src
+                WHERE    1 = 1
+                GROUP BY account_name,
+                         brand,
+                         martian_id,
+                         initial_profile_id ) x;
+
+/* Play Duration Watched in last 7D */
+
+INSERT INTO  prst.prst_video_event
+            (
+                        martian_id,
+                        brand,
+                        event_tstp,
+                        account_name,
+                        profile_id,
+                        event_group,
+                        event_type,
+                        event_parameter,
+                        event_parameter_value,
+                        event_sequence
+            )
+SELECT x.martian_id AS martian_id,
+       brand,
+       Convert_timezone( 'Australia/Sydney', Getdate() ) AS event_tstp,
+       x.account_name                                    AS account_name,
+       x.initial_profile_id                              AS profile_id,
+       'consumption'                                     AS event_group,
+       'activity_by_play_duration'                       AS event_type,
+       'total_play_duration_last_7d'                     AS event_parameter,
+       Trim( x.event_parameter_value :: varchar(1000) )  AS event_parameter_value,
+       NULL                                              AS event_sequence
+FROM   (
+                SELECT   account_name,
+                         brand,
+                         martian_id,
+                         initial_profile_id,
+                         nvl( sum( CASE WHEN stream_start_date BETWEEN dateadd( 'day', -8, getdate() ) AND getdate() THEN effective_play_duration END ), 0 ) AS event_parameter_value
+                FROM     #stream_event_working src
+                WHERE    1 = 1 
+                GROUP BY account_name,
+                         brand,
+                         martian_id,
+                         initial_profile_id ) x;
+
+/* Likelihood to watch movie */
+
+INSERT INTO  prst.prst_video_event
+            (
+                        martian_id,
+                        brand,
+                        event_tstp,
+                        account_name,
+                        profile_id,
+                        event_group,
+                        event_type,
+                        event_parameter,
+                        event_parameter_value,
+                        event_sequence
+            )
+SELECT x.martian_id AS martian_id,
+       brand,
+       Convert_timezone( 'Australia/Sydney', Getdate() ) AS event_tstp,
+       x.account_name                                    AS account_name,
+       x.initial_profile_id                              AS profile_id,
+       'consumption'                                     AS event_group,
+       'activity_by_play_count'                          AS event_type,
+       'likelihood_to_watch_movie'                       AS event_parameter,
+       Trim( x.event_parameter_value :: varchar(1000) )  AS event_parameter_value,
+       NULL                                              AS event_sequence
+FROM   (
+              SELECT y.*,
+                     round( movies_play_count / play_count :: decimal(7, 2), 3 ) AS event_parameter_value
+              FROM   (
+                              SELECT   account_name,
+                                       brand,
+                                       martian_id,
+                                       initial_profile_id,
+                                       count ( CASE WHEN effective_play_duration > 0 AND stream_asset_type LIKE '%film%' THEN 1 END ) AS movies_play_count,
+                                       count ( CASE WHEN effective_play_duration > 0 THEN 1 END ) AS play_count
+                              FROM     #stream_event_working src
+                              GROUP BY account_name,
+                                       brand,
+                                       martian_id,
+                                       initial_profile_id ) y ) x;
+
+/* Likelihood to watch tv-series */
+INSERT INTO  prst.prst_video_event
+            (
+                        martian_id,
+                        brand,
+                        event_tstp,
+                        account_name,
+                        profile_id,
+                        event_group,
+                        event_type,
+                        event_parameter,
+                        event_parameter_value,
+                        event_sequence
+            )
+SELECT x.martian_id AS martian_id,
+       brand,
+       Convert_timezone( 'Australia/Sydney', Getdate() ) AS event_tstp,
+       x.account_name                                    AS account_name,
+       x.initial_profile_id                              AS profile_id,
+       'consumption'                                     AS event_group,
+       'activity_by_play_count'                          AS event_type,
+       'likelihood_to_watch_tv_series'                       AS event_parameter,
+       Trim( x.event_parameter_value :: varchar(1000) )  AS event_parameter_value,
+       NULL                                              AS event_sequence
+FROM   (
+              SELECT y.*,
+                     round( movies_play_count / play_count :: decimal(7, 2), 3 ) AS event_parameter_value
+              FROM   (
+                              SELECT   account_name,
+                                       brand,
+                                       martian_id,
+                                       initial_profile_id,
+                                       count ( CASE WHEN effective_play_duration > 0 AND stream_asset_type IN ( 'series', 'tv-episode', 'miniseries' ) THEN 1 END ) AS movies_play_count,
+                                       count ( CASE WHEN effective_play_duration > 0 THEN 1 END ) AS play_count
+                              FROM     #stream_event_working src
+                              GROUP BY account_name,
+                                       brand,
+                                       martian_id,
+                                       initial_profile_id ) y ) x;
+
+
+/* Likelihood to watch HBO */
+
+INSERT INTO  prst.prst_video_event
+            (
+                        martian_id,
+                        brand,
+                        event_tstp,
+                        account_name,
+                        profile_id,
+                        event_group,
+                        event_type,
+                        event_parameter,
+                        event_parameter_value,
+                        event_sequence
+            )
+
+
+SELECT x.martian_id AS martian_id,
+       brand,
+       Convert_timezone( 'Australia/Sydney', Getdate() ) AS event_tstp,
+       x.account_name                                    AS account_name,
+       x.initial_profile_id                              AS profile_id,
+       'consumption'                                     AS event_group,
+       'activity_by_play_count'                          AS event_type,
+       'likelihood_of_watching_HBO'                      AS event_parameter,
+       Trim( x.event_parameter_value :: varchar(1000) )  AS event_parameter_value,
+       NULL                                              AS event_sequence
+FROM   (
+              SELECT y.*,
+                     round( distributor_play_count / play_count :: decimal(7, 2), 3 ) AS event_parameter_value
+              FROM   (
+                              SELECT   account_name,
+                                       brand,
+                                       martian_id,
+                                       initial_profile_id,
+                                       count (CASE WHEN effective_play_duration > 0 AND distributor = 'hbo' THEN 1 END ) AS distributor_play_count,
+                                       count (CASE WHEN effective_play_duration > 0 THEN 1 END ) AS play_count
+                              FROM     #stream_event_working src
+                              GROUP BY account_name,
+                                       brand,
+                                       martian_id,
+                                       initial_profile_id 
+                        ) y 
+          ) x;
+
+/* Likelihood to watch universal */
+
+INSERT INTO  prst.prst_video_event
+            (
+                        martian_id,
+                        brand,
+                        event_tstp,
+                        account_name,
+                        profile_id,
+                        event_group,
+                        event_type,
+                        event_parameter,
+                        event_parameter_value,
+                        event_sequence
+            )
+SELECT x.martian_id AS martian_id,
+       brand,
+       Convert_timezone( 'Australia/Sydney', Getdate() ) AS event_tstp,
+       x.account_name                                    AS account_name,
+       x.initial_profile_id                              AS profile_id,
+       'consumption'                                     AS event_group,
+       'activity_by_play_count'                          AS event_type,
+       'likelihood_of_watching_univesal'                 AS event_parameter,
+       Trim( x.event_parameter_value :: varchar(1000) )  AS event_parameter_value,
+       NULL                                              AS event_sequence
+FROM   (
+              SELECT y.*,
+                     round( distributor_play_count / play_count :: decimal(7, 2), 3 ) AS event_parameter_value
+              FROM   (
+                              SELECT   account_name,
+                                       brand,
+                                       martian_id,
+                                       initial_profile_id,
+                                       count (CASE WHEN effective_play_duration > 0 AND distributor = 'universal' THEN 1 END ) AS distributor_play_count,
+                                       count (CASE WHEN effective_play_duration > 0 THEN 1 END ) AS play_count
+                              FROM     #stream_event_working src
+                              GROUP BY account_name,
+                                       brand,
+                                       martian_id,
+                                       initial_profile_id ) y ) x;
+
+
+/* Likelihood to watch mtv */
+
+INSERT INTO  prst.prst_video_event
+            (
+                        martian_id,
+                        brand,
+                        event_tstp,
+                        account_name,
+                        profile_id,
+                        event_group,
+                        event_type,
+                        event_parameter,
+                        event_parameter_value,
+                        event_sequence
+            )
+SELECT x.martian_id AS martian_id,
+       brand,
+       Convert_timezone( 'Australia/Sydney', Getdate() ) AS event_tstp,
+       x.account_name                                    AS account_name,
+       x.initial_profile_id                              AS profile_id,
+       'consumption'                                     AS event_group,
+       'activity_by_play_count'                          AS event_type,
+       'likelihood_of_mtv'                               AS event_parameter,
+       Trim( x.event_parameter_value :: varchar(1000) )  AS event_parameter_value,
+       NULL                                              AS event_sequence
+FROM   (
+              SELECT y.*,
+                     round( distributor_play_count / play_count :: decimal(7, 2), 3 ) AS event_parameter_value
+              FROM   (
+                              SELECT   account_name,
+                                       brand,
+                                       martian_id,
+                                       initial_profile_id,
+                                       count (CASE WHEN effective_play_duration > 0 AND distributor = 'mtv' THEN 1 END ) AS distributor_play_count,
+                                       count (CASE WHEN effective_play_duration > 0 THEN 1 END ) AS play_count
+                              FROM     #stream_event_working src
+                              GROUP BY account_name,
+                                       brand,
+                                       martian_id,
+                                       initial_profile_id ) y ) x;
+
+/* Likelihood to watch warner bros australia */
+
+INSERT INTO  prst.prst_video_event
+            (
+                        martian_id,
+                        brand,
+                        event_tstp,
+                        account_name,
+                        profile_id,
+                        event_group,
+                        event_type,
+                        event_parameter,
+                        event_parameter_value,
+                        event_sequence
+            )
+SELECT x.martian_id AS martian_id,
+       brand,
+       Convert_timezone( 'Australia/Sydney', Getdate() ) AS event_tstp,
+       x.account_name                                    AS account_name,
+       x.initial_profile_id                              AS profile_id,
+       'consumption'                                     AS event_group,
+       'activity_by_play_count'                          AS event_type,
+       'likelihood_of_watching_warner_bros_australia'                 AS event_parameter,
+       Trim( x.event_parameter_value :: varchar(1000) )  AS event_parameter_value,
+       NULL                                              AS event_sequence
+FROM   (
+              SELECT y.*,
+                     round( distributor_play_count / play_count :: decimal(7, 2), 3 ) AS event_parameter_value
+              FROM   (
+                              SELECT   account_name,
+                                       brand,
+                                       martian_id,
+                                       initial_profile_id,
+                                       count (CASE WHEN effective_play_duration > 0 AND distributor = 'warner bros (australia)' THEN 1 END ) AS distributor_play_count,
+                                       count (CASE WHEN effective_play_duration > 0 THEN 1 END ) AS play_count
+                              FROM     #stream_event_working src
+                              GROUP BY account_name,
+                                       brand,
+                                       martian_id,
+                                       initial_profile_id ) y ) x;
+
+/* Likelihood to watch cartoon network */
+
+INSERT INTO  prst.prst_video_event
+            (
+                        martian_id,
+                        brand,
+                        event_tstp,
+                        account_name,
+                        profile_id,
+                        event_group,
+                        event_type,
+                        event_parameter,
+                        event_parameter_value,
+                        event_sequence
+            )
+SELECT x.martian_id AS martian_id,
+       brand,
+       Convert_timezone( 'Australia/Sydney', Getdate() ) AS event_tstp,
+       x.account_name                                    AS account_name,
+       x.initial_profile_id                              AS profile_id,
+       'consumption'                                     AS event_group,
+       'activity_by_play_count'                          AS event_type,
+       'likelihood_of_watching_cartoon_network'                 AS event_parameter,
+       Trim( x.event_parameter_value :: varchar(1000) )  AS event_parameter_value,
+       NULL                                              AS event_sequence
+FROM   (
+              SELECT y.*,
+                     round( distributor_play_count / play_count :: decimal(7, 2), 3 ) AS event_parameter_value
+              FROM   (
+                              SELECT   account_name,
+                                       brand,
+                                       martian_id,
+                                       initial_profile_id,
+                                       count (CASE WHEN effective_play_duration > 0 AND distributor = 'cartoon network' THEN 1 END ) AS distributor_play_count,
+                                       count (CASE WHEN effective_play_duration > 0 THEN 1 END ) AS play_count
+                              FROM     #stream_event_working src
+                              GROUP BY account_name,
+                                       brand,
+                                       martian_id,
+                                       initial_profile_id ) y ) x;
+
+/* Likelihood to watch 20th Fox */
+
+INSERT INTO  prst.prst_video_event
+            (
+                        martian_id,
+                        brand,
+                        event_tstp,
+                        account_name,
+                        profile_id,
+                        event_group,
+                        event_type,
+                        event_parameter,
+                        event_parameter_value,
+                        event_sequence
+            )
+
+
+SELECT x.martian_id AS martian_id,
+       brand,
+       Convert_timezone( 'Australia/Sydney', Getdate() ) AS event_tstp,
+       x.account_name                                    AS account_name,
+       x.initial_profile_id                              AS profile_id,
+       'consumption'                                     AS event_group,
+       'activity_by_play_count'                          AS event_type,
+       'likelihood_of_watching_century_fox'              AS event_parameter,
+       Trim( x.event_parameter_value :: varchar(1000) )  AS event_parameter_value,
+       NULL                                              AS event_sequence
+FROM   (
+              SELECT y.*,
+                     round( distributor_play_count / play_count :: decimal(7, 2), 3 ) AS event_parameter_value
+              FROM   (
+                              SELECT   account_name,
+                                       brand,
+                                       martian_id,
+                                       initial_profile_id,
+                                       count ( CASE WHEN effective_play_duration > 0 AND distributor = '20th century fox' THEN 1 END ) AS distributor_play_count,
+                                       count ( CASE WHEN effective_play_duration > 0 THEN 1 END ) AS play_count
+                              FROM     #stream_event_working src
+                              GROUP BY account_name,
+                                       brand,
+                                       martian_id,
+                                       initial_profile_id ) y ) x;
+
+/* Likelihood to watch Reality TV */
+
+INSERT INTO  prst.prst_video_event
+            (
+                        martian_id,
+                        brand,
+                        event_tstp,
+                        account_name,
+                        profile_id,
+                        event_group,
+                        event_type,
+                        event_parameter,
+                        event_parameter_value,
+                        event_sequence
+            )
+
+
+SELECT x.martian_id AS martian_id,
+       brand,
+       Convert_timezone( 'Australia/Sydney', Getdate() ) AS event_tstp,
+       x.account_name                                    AS account_name,
+       x.initial_profile_id                              AS profile_id,
+       'consumption'                                     AS event_group,
+       'activity_by_play_count'                          AS event_type,
+       'likelihood_of_watching_reality_tv'               AS event_parameter,
+       Trim( x.event_parameter_value :: varchar(1000) )  AS event_parameter_value,
+       NULL                                              AS event_sequence
+FROM   (
+              SELECT y.*,
+                     round( genre_play_count / play_count :: decimal(7, 2), 3 ) AS event_parameter_value
+              FROM   (
+                              SELECT   account_name,
+                                       brand,
+                                       martian_id,
+                                       initial_profile_id,
+                                       count ( CASE WHEN effective_play_duration > 0 AND sport_name = 'reality-tv' THEN 1 END ) AS genre_play_count,
+                                       count ( CASE WHEN effective_play_duration > 0 THEN 1 END ) AS play_count
+                              FROM     #stream_event_working src
+                              GROUP BY account_name,
+                                       brand,
+                                       martian_id,
+                                       initial_profile_id ) y ) x;
+
+
+/* Likelihood to watch Drama */
+
+INSERT INTO  prst.prst_video_event
+            (
+                        martian_id,
+                        brand,
+                        event_tstp,
+                        account_name,
+                        profile_id,
+                        event_group,
+                        event_type,
+                        event_parameter,
+                        event_parameter_value,
+                        event_sequence
+            )
+
+
+SELECT x.martian_id AS martian_id,
+       brand,
+       Convert_timezone( 'Australia/Sydney', Getdate() ) AS event_tstp,
+       x.account_name                                    AS account_name,
+       x.initial_profile_id                              AS profile_id,
+       'consumption'                                     AS event_group,
+       'activity_by_play_count'                          AS event_type,
+       'likelihood_of_watching_drama'               AS event_parameter,
+       Trim( x.event_parameter_value :: varchar(1000) )  AS event_parameter_value,
+       NULL                                              AS event_sequence
+FROM   (
+              SELECT y.*,
+                     round( genre_play_count / play_count :: decimal(7, 2), 3 ) AS event_parameter_value
+              FROM   (
+                              SELECT   account_name,
+                                       brand,
+                                       martian_id,
+                                       initial_profile_id,
+                                       count ( CASE WHEN effective_play_duration > 0 AND sport_name = 'drama' THEN 1 END ) AS genre_play_count,
+                                       count ( CASE WHEN effective_play_duration > 0 THEN 1 END ) AS play_count
+                              FROM     #stream_event_working src
+                              GROUP BY account_name,
+                                       brand,
+                                       martian_id,
+                                       initial_profile_id ) y ) x;
+
+
+/* Likelihood to watch Action */
+
+INSERT INTO  prst.prst_video_event
+            (
+                        martian_id,
+                        brand,
+                        event_tstp,
+                        account_name,
+                        profile_id,
+                        event_group,
+                        event_type,
+                        event_parameter,
+                        event_parameter_value,
+                        event_sequence
+            )
+
+
+SELECT x.martian_id AS martian_id,
+       brand,
+       Convert_timezone( 'Australia/Sydney', Getdate() ) AS event_tstp,
+       x.account_name                                    AS account_name,
+       x.initial_profile_id                              AS profile_id,
+       'consumption'                                     AS event_group,
+       'activity_by_play_count'                          AS event_type,
+       'likelihood_of_watching_action'               AS event_parameter,
+       Trim( x.event_parameter_value :: varchar(1000) )  AS event_parameter_value,
+       NULL                                              AS event_sequence
+FROM   (
+              SELECT y.*,
+                     round( genre_play_count / play_count :: decimal(7, 2), 3 ) AS event_parameter_value
+              FROM   (
+                              SELECT   account_name,
+                                       brand,
+                                       martian_id,
+                                       initial_profile_id,
+                                       count ( CASE WHEN effective_play_duration > 0 AND sport_name = 'action' THEN 1 END ) AS genre_play_count,
+                                       count ( CASE WHEN effective_play_duration > 0 THEN 1 END ) AS play_count
+                              FROM     #stream_event_working src
+                              GROUP BY account_name,
+                                       brand,
+                                       martian_id,
+                                       initial_profile_id ) y ) x;
+
+
+
+/* Likelihood to watch Comedy */
+
+INSERT INTO  prst.prst_video_event
+            (
+                        martian_id,
+                        brand,
+                        event_tstp,
+                        account_name,
+                        profile_id,
+                        event_group,
+                        event_type,
+                        event_parameter,
+                        event_parameter_value,
+                        event_sequence
+            )
+
+
+SELECT x.martian_id AS martian_id,
+       brand,
+       Convert_timezone( 'Australia/Sydney', Getdate() ) AS event_tstp,
+       x.account_name                                    AS account_name,
+       x.initial_profile_id                              AS profile_id,
+       'consumption'                                     AS event_group,
+       'activity_by_play_count'                          AS event_type,
+       'likelihood_of_watching_comedy'               AS event_parameter,
+       Trim( x.event_parameter_value :: varchar(1000) )  AS event_parameter_value,
+       NULL                                              AS event_sequence
+FROM   (
+              SELECT y.*,
+                     round( genre_play_count / play_count :: decimal(7, 2), 3 ) AS event_parameter_value
+              FROM   (
+                              SELECT   account_name,
+                                       brand,
+                                       martian_id,
+                                       initial_profile_id,
+                                       count ( CASE WHEN effective_play_duration > 0 AND sport_name = 'comedy' THEN 1 END ) AS genre_play_count,
+                                       count ( CASE WHEN effective_play_duration > 0 THEN 1 END ) AS play_count
+                              FROM     #stream_event_working src
+                              GROUP BY account_name,
+                                       brand,
+                                       martian_id,
+                                       initial_profile_id ) y ) x;
+
+
+
+/* Likelihood to watch Kids */
+
+INSERT INTO  prst.prst_video_event
+            (
+                        martian_id,
+                        brand,
+                        event_tstp,
+                        account_name,
+                        profile_id,
+                        event_group,
+                        event_type,
+                        event_parameter,
+                        event_parameter_value,
+                        event_sequence
+            )
+
+
+SELECT x.martian_id AS martian_id,
+       brand,
+       Convert_timezone( 'Australia/Sydney', Getdate() ) AS event_tstp,
+       x.account_name                                    AS account_name,
+       x.initial_profile_id                              AS profile_id,
+       'consumption'                                     AS event_group,
+       'activity_by_play_count'                          AS event_type,
+       'likelihood_of_watching_kids'                     AS event_parameter,
+       Trim( x.event_parameter_value :: varchar(1000) )  AS event_parameter_value,
+       NULL                                              AS event_sequence
+FROM   (
+              SELECT y.*,
+                     round( genre_play_count / play_count :: decimal(7, 2), 3 ) AS event_parameter_value
+              FROM   (
+                              SELECT   account_name,
+                                       brand,
+                                       martian_id,
+                                       initial_profile_id,
+                                       count ( CASE WHEN effective_play_duration > 0 AND sport_name = 'kids' THEN 1 END ) AS genre_play_count,
+                                       count ( CASE WHEN effective_play_duration > 0 THEN 1 END ) AS play_count
+                              FROM     #stream_event_working src
+                              GROUP BY account_name,
+                                       brand,
+                                       martian_id,
+                                       initial_profile_id ) y ) x;
+
+/* Likelihood to watch lifestyle */
+
+INSERT INTO  prst.prst_video_event
+            (
+                        martian_id,
+                        brand,
+                        event_tstp,
+                        account_name,
+                        profile_id,
+                        event_group,
+                        event_type,
+                        event_parameter,
+                        event_parameter_value,
+                        event_sequence
+            )
+
+
+SELECT x.martian_id AS martian_id,
+       brand,
+       Convert_timezone( 'Australia/Sydney', Getdate() ) AS event_tstp,
+       x.account_name                                    AS account_name,
+       x.initial_profile_id                              AS profile_id,
+       'consumption'                                     AS event_group,
+       'activity_by_play_count'                          AS event_type,
+       'likelihood_of_watching_lifestyle'                AS event_parameter,
+       Trim( x.event_parameter_value :: varchar(1000) )  AS event_parameter_value,
+       NULL                                              AS event_sequence
+FROM   (
+              SELECT y.*,
+                     round( genre_play_count / play_count :: decimal(7, 2), 3 ) AS event_parameter_value
+              FROM   (
+                              SELECT   account_name,
+                                       brand,
+                                       martian_id,
+                                       initial_profile_id,
+                                       count ( CASE WHEN effective_play_duration > 0 AND sport_name = 'lifestyle' THEN 1 END ) AS genre_play_count,
+                                       count ( CASE WHEN effective_play_duration > 0 THEN 1 END ) AS play_count
+                              FROM     #stream_event_working src
+                              GROUP BY account_name,
+                                       brand,
+                                       martian_id,
+                                       initial_profile_id ) y ) x;
+
+/* Likelihood to watch family */
+
+INSERT INTO  prst.prst_video_event
+            (
+                        martian_id,
+                        brand,
+                        event_tstp,
+                        account_name,
+                        profile_id,
+                        event_group,
+                        event_type,
+                        event_parameter,
+                        event_parameter_value,
+                        event_sequence
+            )
+
+
+SELECT x.martian_id AS martian_id,
+       brand,
+       Convert_timezone( 'Australia/Sydney', Getdate() ) AS event_tstp,
+       x.account_name                                    AS account_name,
+       x.initial_profile_id                              AS profile_id,
+       'consumption'                                     AS event_group,
+       'activity_by_play_count'                          AS event_type,
+       'likelihood_of_watching_family'                   AS event_parameter,
+       Trim( x.event_parameter_value :: varchar(1000) )  AS event_parameter_value,
+       NULL                                              AS event_sequence
+FROM   (
+              SELECT y.*,
+                     round( genre_play_count / play_count :: decimal(7, 2), 3 ) AS event_parameter_value
+              FROM   (
+                              SELECT   account_name,
+                                       brand,
+                                       martian_id,
+                                       initial_profile_id,
+                                       count (
+                                       CASE WHEN effective_play_duration > 0  AND sport_name = 'family' THEN 1 END ) AS genre_play_count,
+                                       count (
+                                       CASE WHEN effective_play_duration > 0 THEN 1 END ) AS play_count
+                              FROM     #stream_event_working src
+                              GROUP BY account_name,
+                                       brand,
+                                       martian_id,
+                                       initial_profile_id ) y ) x;
+
+/* Likelihood to watch crime or thriller */
+
+INSERT INTO  prst.prst_video_event
+            (
+                        martian_id,
+                        brand,
+                        event_tstp,
+                        account_name,
+                        profile_id,
+                        event_group,
+                        event_type,
+                        event_parameter,
+                        event_parameter_value,
+                        event_sequence
+            )
+
+
+SELECT x.martian_id AS martian_id,
+       brand,
+       Convert_timezone( 'Australia/Sydney', Getdate() ) AS event_tstp,
+       x.account_name                                    AS account_name,
+       x.initial_profile_id                              AS profile_id,
+       'consumption'                                     AS event_group,
+       'activity_by_play_count'                          AS event_type,
+       'likelihood_of_watching_crime_or_thriller'        AS event_parameter,
+       Trim( x.event_parameter_value :: varchar(1000) )  AS event_parameter_value,
+       NULL                                              AS event_sequence
+FROM   (
+              SELECT y.*,
+                     round( genre_play_count / play_count :: decimal(7, 2), 3 ) AS event_parameter_value
+              FROM   (
+                              SELECT   account_name,
+                                       brand,
+                                       martian_id,
+                                       initial_profile_id,
+                                       count (CASE WHEN effective_play_duration > 0 AND sport_name IN ('crime','thriller') THEN 1 END ) AS genre_play_count,
+                                       count (CASE WHEN effective_play_duration > 0 THEN 1 END ) AS play_count
+                              FROM     #stream_event_working src
+                              GROUP BY account_name,
+                                       brand,
+                                       martian_id,
+                                       initial_profile_id ) y ) x;
+
+/* Likelihood to watch movie on weekend */
+/* measured by the number of weeks that fulfill criteria over the numnber of weeks that they had viewed something */
+
+INSERT INTO  prst.prst_video_event
+            (
+                        martian_id,
+                        brand,
+                        event_tstp,
+                        account_name,
+                        profile_id,
+                        event_group,
+                        event_type,
+                        event_parameter,
+                        event_parameter_value,
+                        event_sequence
+            )
+
+
+SELECT x.martian_id AS martian_id,
+       brand,
+       Convert_timezone( 'Australia/Sydney', Getdate() ) AS event_tstp,
+       x.account_name                                    AS account_name,
+       x.initial_profile_id                              AS profile_id,
+       'consumption'                                     AS event_group,
+       'activity_by_active_weeks'                          AS event_type,
+       'likelihood_of_watching_movie_on_weekend'         AS event_parameter,
+       Trim( x.event_parameter_value :: varchar(1000) )  AS event_parameter_value,
+       NULL                                              AS event_sequence
+FROM   (
+                SELECT   account_name,
+                         brand,
+                         martian_id,
+                         initial_profile_id,
+                         round( count( DISTINCT asset_type_unique_week_number )/ count(DISTINCT unique_week_number) :: decimal(7, 2), 3 ) AS event_parameter_value
+                FROM     (
+                                  SELECT   account_name,
+                                           brand,
+                                           martian_id,
+                                           initial_profile_id,
+                                           stream_start_date,
+                                           datepart('week', stream_start_date)                                          AS week,
+                                           datepart('year', stream_start_date)                                          AS year,
+                                           dense_rank() OVER ( partition BY martian_id, brand ORDER BY year, week ASC ) AS unique_week_number,
+                                           CASE WHEN stream_asset_type LIKE '%film%' AND datepart('weekday', stream_start_date) IN ('6', '0') THEN unique_week_number
+                                           END AS asset_type_unique_week_number
+                                  FROM     #stream_event_working src ) y
+                GROUP BY 1,
+                         2,
+                         3,
+                         4 ) x;
+
+/* Likelihood to watch movie on weekday */
+
+INSERT INTO  prst.prst_video_event
+            (
+                        martian_id,
+                        brand,
+                        event_tstp,
+                        account_name,
+                        profile_id,
+                        event_group,
+                        event_type,
+                        event_parameter,
+                        event_parameter_value,
+                        event_sequence
+            )
+
+  
+SELECT x.martian_id AS martian_id,
+       brand,
+       Convert_timezone( 'Australia/Sydney', Getdate() ) AS event_tstp,
+       x.account_name                                    AS account_name,
+       x.initial_profile_id                              AS profile_id,
+       'consumption'                                     AS event_group,
+       'activity_by_active_weeks'                          AS event_type,
+       'likelihood_of_watching_movie_on_weekday'         AS event_parameter,
+       Trim( x.event_parameter_value :: varchar(1000) )  AS event_parameter_value,
+       NULL                                              AS event_sequence
+FROM   (
+                SELECT   account_name,
+                         brand,
+                         martian_id,
+                         initial_profile_id,
+                         round( count( DISTINCT asset_type_unique_week_number )/ count(DISTINCT unique_week_number) :: decimal(7, 2), 3 ) AS event_parameter_value
+                FROM     (
+                                  SELECT   account_name,
+                                           brand,
+                                           martian_id,
+                                           initial_profile_id,
+                                           stream_start_date,
+                                           datepart('week', stream_start_date)                                          AS week,
+                                           datepart('year', stream_start_date)                                          AS year,
+                                           dense_rank() OVER ( partition BY martian_id, brand ORDER BY year, week ASC ) AS unique_week_number,
+                                           CASE WHEN stream_asset_type LIKE '%film%' AND datepart('weekday', stream_start_date) BETWEEN 1 AND 5 THEN unique_week_number END AS asset_type_unique_week_number
+                                  FROM     #stream_event_working src ) y
+                GROUP BY 1,
+                         2,
+                         3,
+                         4 
+          ) x;
+
+/* Likelihood to watch movie on friday */
+
+INSERT INTO  prst.prst_video_event
+            (
+                        martian_id,
+                        brand,
+                        event_tstp,
+                        account_name,
+                        profile_id,
+                        event_group,
+                        event_type,
+                        event_parameter,
+                        event_parameter_value,
+                        event_sequence
+            )
+SELECT x.martian_id AS martian_id,
+       brand,
+       Convert_timezone( 'Australia/Sydney', Getdate() ) AS event_tstp,
+       x.account_name                                    AS account_name,
+       x.initial_profile_id                              AS profile_id,
+       'consumption'                                     AS event_group,
+       'activity_by_active_weeks'                          AS event_type,
+       'likelihood_of_watching_movie_on_friday'          AS event_parameter,
+       Trim( x.event_parameter_value :: varchar(1000) )  AS event_parameter_value,
+       NULL                                              AS event_sequence
+FROM   
+        (
+                SELECT   account_name,
+                         brand,
+                         martian_id,
+                         initial_profile_id,
+                         round( count( DISTINCT asset_type_unique_week_number )/ count(DISTINCT unique_week_number) :: decimal(7, 2), 3 ) AS event_parameter_value
+                FROM     
+                        (
+                                  SELECT   account_name,
+                                           brand,
+                                           martian_id,
+                                           initial_profile_id,
+                                           stream_start_date,
+                                           datepart('week', stream_start_date)                                          AS week,
+                                           datepart('year', stream_start_date)                                          AS year,
+                                           dense_rank() OVER ( partition BY martian_id, brand ORDER BY year, week ASC ) AS unique_week_number,
+                                           CASE WHEN stream_asset_type LIKE '%film%' AND datepart('weekday', stream_start_date) = 5 THEN unique_week_number END AS asset_type_unique_week_number
+                                  FROM     #stream_event_working src 
+                          ) y
+                GROUP BY 1,
+                         2,
+                         3,
+                         4 
+        ) x;
+
+/* Likelihood to watch series on weekend */
+
+INSERT INTO  prst.prst_video_event
+            (
+                        martian_id,
+                        brand,
+                        event_tstp,
+                        account_name,
+                        profile_id,
+                        event_group,
+                        event_type,
+                        event_parameter,
+                        event_parameter_value,
+                        event_sequence
+            )
+
+SELECT x.martian_id AS martian_id,
+       brand,
+       Convert_timezone( 'Australia/Sydney', Getdate() ) AS event_tstp,
+       x.account_name                                    AS account_name,
+       x.initial_profile_id                              AS profile_id,
+       'consumption'                                     AS event_group,
+       'activity_by_active_weeks'                          AS event_type,
+       'likelihood_of_watching_series_on_weekend'        AS event_parameter,
+       Trim( x.event_parameter_value :: varchar(1000) )  AS event_parameter_value,
+       NULL                                              AS event_sequence
+FROM   
+      (
+                SELECT   account_name,
+                         brand,
+                         martian_id,
+                         initial_profile_id,
+                         round( count( DISTINCT asset_type_unique_week_number )/ count(DISTINCT unique_week_number) :: decimal(7, 2), 3 ) AS event_parameter_value
+                FROM     
+                        (
+                                  SELECT   account_name,
+                                           brand,
+                                           martian_id,
+                                           initial_profile_id,
+                                           stream_start_date,
+                                           datepart('week', stream_start_date)                                          AS week,
+                                           datepart('year', stream_start_date)                                          AS year,
+                                           dense_rank() OVER ( partition BY martian_id, brand ORDER BY year, week ASC ) AS unique_week_number,
+                                           CASE WHEN stream_asset_type IN ( 'series', 'tv-episode', 'miniseries' ) AND datepart('weekday', stream_start_date) IN ('6', '0') THEN unique_week_number END AS asset_type_unique_week_number
+                                  FROM     #stream_event_working src 
+                          ) y
+                GROUP BY 1,
+                         2,
+                         3,
+                         4 
+        ) x;
+
+/* Likelihood to watch series on weekday */
+
+INSERT INTO  prst.prst_video_event
+            (
+                        martian_id,
+                        brand,
+                        event_tstp,
+                        account_name,
+                        profile_id,
+                        event_group,
+                        event_type,
+                        event_parameter,
+                        event_parameter_value,
+                        event_sequence
+            )
+
+SELECT x.martian_id AS martian_id,
+       brand,
+       Convert_timezone( 'Australia/Sydney', Getdate() ) AS event_tstp,
+       x.account_name                                    AS account_name,
+       x.initial_profile_id                              AS profile_id,
+       'consumption'                                     AS event_group,
+       'activity_by_active_weeks'                          AS event_type,
+       'likelihood_of_watching_series_on_weekday'        AS event_parameter,
+       Trim( x.event_parameter_value :: varchar(1000) )  AS event_parameter_value,
+       NULL                                              AS event_sequence
+FROM   (
+                SELECT   account_name,
+                         brand,
+                         martian_id,
+                         initial_profile_id,
+                         round( count( DISTINCT asset_type_unique_week_number )/ count(DISTINCT unique_week_number) :: decimal(7, 2), 3 ) AS event_parameter_value
+                FROM     (
+                                  SELECT   account_name,
+                                           brand,
+                                           martian_id,
+                                           initial_profile_id,
+                                           stream_start_date,
+                                           datepart('week', stream_start_date)                                          AS week,
+                                           datepart('year', stream_start_date)                                          AS year,
+                                           dense_rank() OVER ( partition BY martian_id, brand ORDER BY year, week ASC ) AS unique_week_number,
+                                           CASE WHEN stream_asset_type IN ( 'series','tv-episode','miniseries' ) AND datepart('weekday', stream_start_date) BETWEEN 1 AND 5 THEN unique_week_number END AS asset_type_unique_week_number
+                                  FROM     #stream_event_working src ) y
+GROUP BY 1,
+         2,
+         3,
+         4 
+        ) x;
+
+/* Likelihood to watch series on friday */
+
+INSERT INTO  prst.prst_video_event
+            (
+                        martian_id,
+                        brand,
+                        event_tstp,
+                        account_name,
+                        profile_id,
+                        event_group,
+                        event_type,
+                        event_parameter,
+                        event_parameter_value,
+                        event_sequence
+            )
+
+SELECT x.martian_id AS martian_id,
+       brand,
+       Convert_timezone( 'Australia/Sydney', Getdate() ) AS event_tstp,
+       x.account_name                                    AS account_name,
+       x.initial_profile_id                              AS profile_id,
+       'consumption'                                     AS event_group,
+       'activity_by_active_weeks'                          AS event_type,
+       'likelihood_of_watching_series_on_friday'         AS event_parameter,
+       Trim( x.event_parameter_value :: varchar(1000) )  AS event_parameter_value,
+       NULL                                              AS event_sequence
+FROM   (
+                SELECT   y.account_name,
+                         y.brand,
+                         y.martian_id,
+                         y.initial_profile_id,
+                         round( count( DISTINCT asset_type_unique_week_number )/ count(DISTINCT unique_week_number) :: decimal(7, 2), 3 ) AS event_parameter_value
+                FROM     (
+                                  SELECT   account_name,
+                                           brand,
+                                           martian_id,
+                                           initial_profile_id,
+                                           stream_start_date,
+                                           datepart('week', stream_start_date)                                          AS week,
+                                           datepart('year', stream_start_date)                                          AS year,
+                                           dense_rank() OVER ( partition BY martian_id, brand ORDER BY year, week ASC ) AS unique_week_number,
+                                           CASE WHEN stream_asset_type IN ( 'series','tv-episode','miniseries' ) AND datepart('weekday', stream_start_date) = 5 THEN unique_week_number END AS asset_type_unique_week_number
+                                  FROM     #stream_event_working src ) y
+                GROUP BY 1,
+                         2,
+                         3,
+                         4 
+        ) x
+        
